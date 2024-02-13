@@ -51,8 +51,8 @@ Resources:
         config:
             packages:
                 yum:
-                httpd: []
-                php: []
+                    httpd: []
+                    php: []
             groups:
                 apache: {}
             users:
