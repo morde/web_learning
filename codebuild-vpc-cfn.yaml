@@ -183,10 +183,6 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName} Private Routes (AZ2)
 
-
-
-
-
   DefaultPrivateRoute2:
     Type: AWS::EC2::Route
     Properties:
