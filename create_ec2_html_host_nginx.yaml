@@ -97,12 +97,8 @@ Resources:
       Comment: Simple web server host
       AWS::CloudFormation::Init:
         config:
-            packages:
-                yum:
-                  epel-release: []
-                  nginx: []
             groups:
-                apache: {}
+                nginx: {}
             users:
                 "nginx":
                   groups:
@@ -155,7 +151,8 @@ Resources:
             
             # Get the latest CloudFormation helper scripts
             yum install -y aws-cfn-bootstrap
-            amazon-linux-extras enable nginx1
+            amazon-linux-extras install -y nginx1
+            amazon-linux-extras install -y epel
             # Start cfn-init
             /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource WebServerHost --region ${AWS::Region}
             systemctl start nginx
