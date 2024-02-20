@@ -1,0 +1,185 @@
+Parameters:
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.192.0.0/16
+
+  PublicSubnetCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.192.10.0/24
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+    
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: !Ref VpcCIDR
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+          - Key: Name
+            Value: !Ref EnvironmentName
+  
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+        
+  JenkinsServerHost:
+    Type: AWS::EC2::Instance
+    Metadata:
+      Comment: Simple web server host
+      AWS::CloudFormation::Init:
+        config:
+            packages:
+                yum:
+                  httpd: []
+                  php: []
+            groups:
+                apache: {}
+            users:
+                "apache":
+                  groups:
+                    - "apache"
+            files:
+                "/tmp/cwlogs/apacheaccess.conf":
+                  content: !Sub |
+                    [general]
+                    state_file= /var/awslogs/agent-state
+                    [/var/log/httpd/access_log]
+                    file = /var/log/httpd/access_log
+                    log_group_name = ${AWS::StackName}
+                    log_stream_name = {instance_id}/apache.log
+                    datetime_format = %d/%b/%Y:%H:%M:%S
+                  mode: '000400'
+                  owner: apache
+                  group: apache
+                "/var/www/html/index.php":
+                  content: !Sub |
+                    <?php
+                    echo '<h1>AWS CloudFormation sample PHP application for ${AWS::StackName}</h1>';
+                    ?>
+                  mode: '000644'
+                  owner: apache
+                  group: apache
+                "/etc/cfn/cfn-hup.conf":
+                  content: !Sub |
+                    [main]
+                    stack=${AWS::StackId}
+                    region=${AWS::Region}
+                  mode: "000400"
+                  owner: "root"
+                  group: "root"
+                "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+                  content: !Sub |
+                    [cfn-auto-reloader-hook]
+                    triggers=post.update
+                    path=Resources.JenkinsServerHost.Metadata.AWS::CloudFormation::Init
+                    action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource JenkinsServerHost --region ${AWS::Region}
+                  mode: "000400"
+                  owner: "root"
+                  group: "root"
+            services:
+                sysvinit:
+                  httpd:
+                    enabled: 'true'
+                    ensureRunning: 'true'
+                  postfix:
+                    enabled: 'false'
+                    ensureRunning: 'false'
+                  cfn-hup:
+                    enable: 'true'
+                    ensureRunning: 'true'
+                    files:
+                      - "/etc/cfn/cfn-hup.conf"
+                      - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref ImageId
+      KeyName:
+        Ref: KeyName
+      SecurityGroupIds:
+      - Ref: SecurityGroup
+      SubnetId: 
+        Ref: PublicSubnet
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            
+            # Get the latest CloudFormation helper scripts
+            yum install -y aws-cfn-bootstrap
+            
+            # Start cfn-init
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource JenkinsServerHost --region ${AWS::Region}
+            
+            # cfn-init completed so signal success or not
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource JenkinsServerHost --region ${AWS::Region}
+          
+Outputs:
+  WebsiteURL:
+    Description: URL of the website
+    Value:
+      Fn::GetAtt:
+      - JenkinsServerHost
+      - PublicDnsName

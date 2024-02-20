@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates S3 bucket that host basic html page
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: s3 bucket name prefix
+  
+  EnvironmentName:
+    Type: String
+    AllowedValues:
+         - "prod"
+         - "ci"
+         - "test"
+    Description: Name of the Environment (eg. prod/ci/test)
+
+Mappings: 
+
+Conditions: 
+
+Resources: 
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties: 
+      AccessControl: PublicRead
+      OwnershipControls:
+           Rules:
+                - ObjectOwnership: ObjectWriter 
+      BucketName: !Sub "${S3BucketName}${AWS::StackName}${EnvironmentName}"
+      WebsiteConfiguration: 
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      Tags:
+        - Key: key
+          Value: value
+
+Outputs:
+  WebsiteURL:
+    Value: !Sub "${S3Bucket.WebsiteURL}"
