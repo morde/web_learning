@@ -133,12 +133,6 @@ Resources:
                   group: "root"
             services:
                 sysvinit:
-                  httpd:
-                    enabled: 'true'
-                    ensureRunning: 'true'
-                  postfix:
-                    enabled: 'false'
-                    ensureRunning: 'false'
                   cfn-hup:
                     enable: 'true'
                     ensureRunning: 'true'
@@ -161,10 +155,10 @@ Resources:
             
             # Get the latest CloudFormation helper scripts
             yum install -y aws-cfn-bootstrap
-            
+            amazon-linux-extras enable nginx1
             # Start cfn-init
             /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource WebServerHost --region ${AWS::Region}
-            sudo systemctl start nginx
+            systemctl start nginx
 
             # cfn-init completed so signal success or not
             /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource WebServerHost --region ${AWS::Region}
