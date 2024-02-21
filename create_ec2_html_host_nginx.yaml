@@ -82,7 +82,7 @@ Resources:
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable HTTP access
+      GroupDescription: Enable HTTP access, SSH from subnet and from PC
       VpcId:
         Ref: VPC
       SecurityGroupIngress:
@@ -90,6 +90,14 @@ Resources:
         FromPort: '80'
         ToPort: '80'
         CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: !Ref PublicSubnetCIDR
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 147.236.120.128/32
         
   WebServerHost:
     Type: AWS::EC2::Instance
@@ -150,7 +158,9 @@ Resources:
             #!/bin/bash -xe
             
             # Get the latest CloudFormation helper scripts
+            yum update
             yum install -y aws-cfn-bootstrap
+            amazon-linux-extras install java-openjdk11 -y
             amazon-linux-extras install -y nginx1
             amazon-linux-extras install -y epel
             # Start cfn-init
@@ -167,3 +177,9 @@ Outputs:
       Fn::GetAtt:
       - WebServerHost
       - PublicDnsName
+  WebHostIP:
+    Description: URL of the website
+    Value:
+      Fn::GetAtt:
+      - WebServerHost
+      - PublicIp
